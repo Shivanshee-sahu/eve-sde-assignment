@@ -1,0 +1,65 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://eve:eve@postgres:5432/eve
+      JWT_SECRET: ${JWT_SECRET:-replace-this-for-deployment}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      PAYMENT_SUCCESS: ${PAYMENT_SUCCESS:-true}
+      AUTH_REQUESTS_PER_MINUTE: ${AUTH_REQUESTS_PER_MINUTE:-10}
+      BOOKING_REQUESTS_PER_MINUTE: ${BOOKING_REQUESTS_PER_MINUTE:-30}
+      PAYMENT_REQUESTS_PER_MINUTE: ${PAYMENT_REQUESTS_PER_MINUTE:-30}
+      WEBHOOK_REQUESTS_PER_MINUTE: ${WEBHOOK_REQUESTS_PER_MINUTE:-120}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-60}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      ADMIN_REQUESTS_PER_MINUTE: ${ADMIN_REQUESTS_PER_MINUTE:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  worker:
+    build: .
+    command: ["celery", "-A", "app.core.celery_app:celery_app", "worker", "--loglevel=INFO", "--queues=eve_webhooks"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://eve:eve@postgres:5432/eve
+      JWT_SECRET: ${JWT_SECRET:-replace-this-for-deployment}
+      PAYMENT_SUCCESS: ${PAYMENT_SUCCESS:-true}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: eve
+      POSTGRES_USER: eve
+      POSTGRES_PASSWORD: eve
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eve -d eve"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  postgres_data:
+  redis_data:
